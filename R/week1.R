@@ -24,7 +24,7 @@ class(x)
 
 model.formula<-formula(x~y)
 model.formula
-class(model.formulat)
+class(model.formula)
 
 
 ###Spatial CLASSES
@@ -67,7 +67,19 @@ CRAN_CRS<-CRS("+proj=longlat +ellps=WGS84")
 
 #MAKE YOUR FIRST SPATIAL OBJECT
 CRAN_sp<-SpatialPoints(coords=CRAN_mat, proj4string=CRAN_CRS)
-plot(CRAN_sp)
+
+
+install.packages('maps')
+install.packages('maptools')
+install.packages('mapdata')
+
+library(maps)
+library(maptools)
+library(mapdata)
+
+plot(CRAN_sp, col='red', pch=16)
+map('worldHires', add=T)
+mtext("Cran mirrors throughout the world",side=3,line=1, adj=0)
 
 
 #Remember the Bounding Box? sp will make one automatically based on the data
@@ -114,12 +126,7 @@ str(CRAN_spdf)
 
 
 ###SPATIAL LINES
-install.packages('maps')
-install.packages('maptools')
 
-
-library(maps)
-library(maptools)
 
 #get a list of points around australia using the 'maps' package
 australia<-map("world","australia",plot=FALSE)
@@ -198,9 +205,110 @@ legend( "bottomleft", legend=c("Time One","Time Two","Time Three"), col=cols, pc
 box()
 
 
+###MAKING MAPS IN GGPLOT
+
+#We have to present a series of maps to Transport for NSW outlining where we'll be sampling 
+#in our upcoming project looking at recreational boating in Sydney Harbour. These maps are 
+#part of larger document outlining our 'Scope of Work'. This code has been embedded in a 
+#knitr document so that it can easily be updated if things change
+install.packages('ggmap')
+install.packages('grid')
+install.packages('rgeos')
+
+library(ggplot2)
+library(ggmap)
+library(grid)
+library(rgeos)
+
+#mooring field locations
+names<-c('Clontarf', 'Hunters Bay','North Harbour','Watsons Bay', 'Camp Cove','Quarantine Bay')
+type<-c('Mooring/Marina', 'Mooring', 'Mooring/Marina','Mooring','None','None')
+lat<-c(-33.804360,-33.826925,-33.799713,-33.842970, -33.839139, -33.814582)
+lon<-c(151.250773,151.254970,151.269397,151.279814,151.277849,151.285352)
+locations<-data.frame(Area=as.character(names), Lat=lat, Lon=lon, Type=type)
+
+#get a background map of sydney
+sydney_map<-get_map(location=c(151.248,-33.835), zoom=13, source='stamen', maptype='toner')
 
 
+map1<-ggmap(sydney_map)+
+	  geom_point(data=locations, aes(x=lon, y=lat, col=Type), size=5)+
+	  scale_colour_brewer(palette="Dark2")+
+	  labs(x = "Longitude", y= 'Latitude')+
+	  theme(legend.position=c(0.15,0.85),legend.key.size = unit(0.7, "cm"),
+        legend.direction="vertical",plot.title = element_text(size = rel(1.1),hjust=0),
+        axis.title=element_blank(),legend.text=element_text(size=7),plot.title = element_text(size = rel(2), colour = "blue"))+
+	  geom_text(data=locations, aes(x=lon, y=lat, label=Area, col=Type, hjust=1.1, vjust=0))
+map1
 
+#####OR TRY IT WITH ANOTHER BACKGROUND MAP
+
+sydney_map_2<-get_map(location=c(151.248,-33.835), zoom=13)
+
+
+map1<-ggmap(sydney_map_2)+
+	  geom_point(data=locations, aes(x=lon, y=lat, col=Type), size=5)+
+	  scale_colour_brewer(palette="Dark2")+
+	  labs(x = "Longitude", y= 'Latitude')+
+	  theme(legend.position=c(0.15,0.85),legend.key.size = unit(0.7, "cm"),
+        legend.direction="vertical",plot.title = element_text(size = rel(1.1),hjust=0),
+        axis.title=element_blank(),legend.text=element_text(size=7),plot.title = element_text(size = rel(2), colour = "blue"))+
+	  geom_text(data=locations, aes(x=lon, y=lat, label=Area, col=Type, hjust=1.1, vjust=0))
+map1
+
+
+####A MORE COMPLEX EXAMPLE WITH SIMPLE DATA MANIPULATION
+
+#at each of those sites above, we want to get the location of moorings and then plan a sampling regime 
+#that samples randomly from different distances away from each mooring.
+
+###PLOT ONE- The Mooring Locations
+mooring_list_sp<-readRDS(file=paste0(getwd(),'/Data/sydney_moorings'))
+clontarf<-mooring_list_sp[[2]]
+
+plot(clontarf, sub='One: Map mooring locations', pch=16, cex=0.5)
+title(main='One: Map mooring locations')
+
+convex<-gConvexHull(clontarf, byid=F)
+plot(convex,add=T)
+
+inner_zone<-gBuffer(convex, width=-60, byid=F)
+plot(inner_zone, add=T)
+
+sample_point<-spsample(inner_zone, n=1, type='random')
+plot(sample_point, add=T, cex=1, col='red')
+
+sampling_radius<-gBuffer(sample_point, width=60, byid=F)
+plot(sampling_radius,add=T, lty=3)
+
+included_points<-over(clontarf, sampling_radius)
+included_points<-clontarf[!is.na(included_points)]
+plot(included_points, cex=1.5, col='dodgerblue', add=T)
+
+
+library(raster)
+getClass('Raster')
+rast<-raster()
+projection(rast)<-proj4string(clontarf)
+extent(rast)<-extent(clontarf)
+res(rast)<-1
+
+clontarf_rast<-rasterize(clontarf,rast,field=1)
+clontarf_dist_rast<-distance(clontarf_rast)
+plot(clontarf_dist_rast)
+
+sampling_zone<-mask(clontarf_dist_rast,sampling_radius)
+plot(sampling_zone)
+
+
+plot(clontarf, sub='One: Map mooring locations', pch=16, cex=0.5)
+title(main='One: Map mooring locations')
+plot(convex,add=T)
+plot(inner_zone, add=T)
+plot(sample_point, add=T, cex=1, col='red')
+plot(sampling_radius,add=T, lty=3)
+plot(sampling_zone, add=T)
+plot(included_points, cex=1.5, col='dodgerblue', add=T)
 
 
 
