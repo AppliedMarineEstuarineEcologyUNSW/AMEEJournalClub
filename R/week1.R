@@ -311,5 +311,85 @@ plot(sampling_zone, add=T)
 plot(included_points, cex=1.5, col='dodgerblue', add=T)
 
 
+#####RASTERS####
+#moving on to raster layers. The basics.
+
+r<-raster(ncol=10, nrow=10)
+getClass('Raster')
+getClass('RasterLayer')
+
+values(r)<-1:100
+plot(r)
+
+values(r)<-runif(100)
+plot(r)
+
+
+##raster arithmetic
+
+p<-raster(ncol=10,nrow=10)
+values(p)<-runif(length(p)) #notice we are moving away from hard coding
+
+s<-r+p
+plot(s)
+
+a<-mean(p,q,r)
+plot(a)
+
+
+stack1<-stack(r,p,s,a)
+names(stack1)<-c('Layer_R','Layer_Q','Layer_S','The_Mean')
+plot(stack1)
+
+
+#####A real world example
+####Kingsley and I needed to find sites to survey that encompassed rocky reef, but was less than 10m in depth. We had
+#a raster layer from DPI for sub-tidal macrophytes and a rasterlayer from OEH from the depthy
+
+bathy<-raster(paste0(getwd(),'/Data/bathymetry.grd'))
+plot(bathy)
+bathy
+
+
+####Subsetting to only depths less than 
+bathy.10m<-bathy
+bathy.10m[bathy<=-10]<-NA
+plot(bathy.10m)
+
+
+benthos<-raster(paste0(getwd(),'/Data/benthos.grd'))
+plot(benthos)
+benthos
+
+rocky_reef<-benthos
+rocky_reef[benthos==1 | benthos==3]<-NA
+plot(rocky_reef, col='black')
+
+####but lets do it all in one step. Where are the areas
+#with rocky reef, less than 10 m
+
+shallow_reef<-raster()
+extent(shallow_reef)<-extent(bathy)
+res(shallow_reef)<-res(bathy)
+proj4string(shallow_reef)<-proj4string(bathy)
+
+shallow_reef[benthos==2 & bathy>=-10]<-1
+shallow_reef
+plot(shallow_reef,col='red', legend=F)
+
+plot(sydney,add=T)
+##WHAT HAPPENED?
+
+proj4string(shallow_reef)
+proj4string(sydney)
+CRS(sydney)
+
+##they're not the same projections
+
+#lucky theres a wrapper function to transfrom and project different spatial projections
+
+sydney_utm<-spTransform(sydney, CRS=CRS("+proj=utm +zone=56 +south +ellps=GRS80 +units=m +no_defs"))
+plot(sydney_utm, add=T, lwd=0.5)
+
 
 
